@@ -1,0 +1,301 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. P10AP04.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-RESP-CODE        PIC S9(8) COMP VALUE ZERO.
+       01 WS-TABLE                      VALUE SPACES.
+          02 WS-TAB           PIC X(16) OCCURS 12 TIMES.
+       01 WS-SUB              PIC 9(02) VALUE ZERO.
+       COPY DFHAID.
+       COPY DFHBMSCA.
+       COPY P10AS04.
+       01 MASTER-RECORD.
+           02 M-ID            PIC X(05).
+           02 M-NAME          PIC X(15).
+           02 M-LOC           PIC X(03).
+           02 M-DOB.
+               03 M-YY        PIC X(04).
+               03 M-MM        PIC X(02).
+               03 M-DD        PIC X(02).
+           02 M-TECH          PIC X(05).
+           02 M-EARN-I        PIC X(07).
+           02 M-EARN REDEFINES M-EARN-I PIC 9(05)V99.
+           02 M-DEDN-I        PIC X(07).
+           02 M-DEDN REDEFINES M-DEDN-I PIC 9(05)V99.
+       01 DETAILS.
+           02 D-ID            PIC X(05).
+           02 D-NAME          PIC X(15).
+           02 D-LOC           PIC X(03).
+           02 D-DOB.
+               03 D-YY        PIC X(04).
+               03 D-MM        PIC X(02).
+               03 D-DD        PIC X(02).
+           02 D-TECH          PIC X(05).
+           02 D-EARN-I        PIC X(07).
+           02 D-EARN REDEFINES D-EARN-I PIC 9(05)V99.
+           02 D-DEDN-I        PIC X(07).
+           02 D-DEDN REDEFINES D-DEDN-I PIC 9(05)V99.
+       01 FLAG                PIC X(01) VALUE 'N'.
+           88 CHECK-FLAG                VALUE 'N'.
+       01 WS-COM.
+           02 WS-CA         PIC 9(01) VALUE 1 .
+           02 WS-CHECK      PIC 9(01).
+       01 SALARY.
+           02 M-SAL-I         PIC X(07).
+           02 M-SAL REDEFINES M-SAL-I PIC 9(05)V99.
+       LINKAGE SECTION.
+       01 DFHCOMMAREA       PIC X(02).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           IF EIBCALEN = 0
+               MOVE LOW-VALUE TO E2MAPO
+               MOVE -1 TO IDL
+               PERFORM SEND-PARA-1
+           ELSE
+               MOVE LOW-VALUE TO E3MAPO
+               MOVE DFHCOMMAREA TO WS-COM
+               PERFORM NEXT-PARA
+           END-IF.
+       NEXT-PARA.
+           EVALUATE EIBAID
+               WHEN DFHENTER
+                   IF WS-CA = 1
+                       PERFORM ENTER-PARA
+                   ELSE
+                       MOVE ' INVALID KEY PRESSED ' TO MESSAG1O
+                       PERFORM SEND-PARA-1
+                   END-IF
+               WHEN DFHPF2
+                   IF WS-CA = 1
+                       MOVE ' INVALID KEY PRESSED' TO MESSAG1O
+                   ELSE
+                       MOVE 1 TO WS-CHECK
+                       PERFORM SEND-PARA-2
+                   END-IF
+               WHEN DFHPF3
+                   IF WS-CA = 1
+                       PERFORM KEYMAP-PARA
+                   ELSE
+                       PERFORM SEND-PARA-1
+                   END-IF
+               WHEN DFHPF4
+                   IF WS-CA = 1
+                       MOVE ' INVALID KEY PRESSED ' TO MESSAGEO
+                   ELSE
+                       PERFORM UPDATE-PARA
+                   END-IF
+               WHEN DFHPF5
+                   IF WS-CA = 1
+                       MOVE ' INVALID KEY PRESSED ' TO MESSAGEO
+                   ELSE
+                       PERFORM DELETE-PARA
+                   END-IF
+               WHEN DFHPF10
+                   PERFORM KEY-CHECK-PARA
+               WHEN OTHER
+                   MOVE ' INVALID REQUEST ' TO MESSAGEO
+               END-EVALUATE.
+       KEY-CHECK-PARA.
+           IF WS-CHECK = 1
+               PERFORM ADD-PARA
+           ELSE
+               PERFORM NEXT-UPDATE-PARA
+           END-IF.
+       ENTER-PARA.
+           PERFORM RECEIVE-PARA-1
+           IF IDI = SPACES OR ZERO
+               MOVE ' INVALID EMP ID ENTERED ' TO MESSAG1O
+               PERFORM SEND-PARA-1
+           ELSE
+               PERFORM READ-PARA
+           END-IF.
+       READ-PARA.
+           EXEC CICS READ
+               FILE('P10AFILE')
+               RIDFLD(IDI)
+               INTO(MASTER-RECORD)
+               RESP(WS-RESP-CODE)
+           END-EXEC
+           PERFORM READ-CHECK-PARA.
+       READ-CHECK-PARA.
+           EVALUATE WS-RESP-CODE
+               WHEN DFHRESP(NORMAL)
+                   PERFORM MOVE-PARA
+                   PERFORM SEND-PARA-2
+               WHEN DFHRESP(NOTFND)
+                   MOVE 'NOT FOUND ADD IT ' TO MESSAGEO
+                   PERFORM SEND-PARA-1
+               WHEN OTHER
+                   MOVE 'ERROR IN FILE READ' TO MESSAG1O
+                   PERFORM SEND-PARA-1
+           END-EVALUATE.
+       MOVE-PARA.
+           MOVE DFHBMDAR TO LABEL1O , LABEL2O
+           MOVE M-ID TO DIDO
+           MOVE M-NAME TO DNAMEO
+           MOVE M-LOC TO DLOCO
+           MOVE M-TECH TO DTECHO
+           MOVE M-DOB TO DDOBO
+           MOVE M-EARN-I TO DEARNO
+           MOVE M-DEDN-I TO DDEDNO
+           COMPUTE M-SAL = M-EARN - M-DEDN.
+           MOVE M-SAL-I TO DSALO.
+       KEYMAP-PARA.
+           EXEC CICS XCTL
+               PROGRAM('P10AP02')
+               COMMAREA(WS-CA)
+           END-EXEC.
+       ADD-PARA.
+           PERFORM RECEIVE-PARA-2
+           MOVE DIDI TO M-ID
+           MOVE DNAMEI TO M-NAME
+           MOVE DLOCI TO M-LOC
+           MOVE DTECHI TO M-TECH
+           MOVE DDOBI TO M-DOB
+           MOVE DEARNI TO M-EARN-I
+           MOVE DDEDNI TO M-DEDN-I
+           PERFORM CHECK-PARA
+           COMPUTE M-SAL = M-EARN - M-DEDN
+           PERFORM WRITE-PARA.
+           MOVE ' RECORD ADD SUCESSFUL ' TO MESSAGEO
+           PERFORM SEND-PARA-1.
+       WRITE-PARA.
+           EXEC CICS WRITE
+               FILE('P10AFILE')
+               RIDFLD(M-ID)
+               FROM(MASTER-RECORD)
+           END-EXEC.
+       UPDATE-PARA.
+           MOVE 2 TO WS-CHECK
+           PERFORM SEND-PARA-2.
+       NEXT-UPDATE-PARA.
+           PERFORM RECEIVE-PARA-2
+           MOVE DIDI TO M-ID
+           MOVE DNAMEI TO M-NAME
+           MOVE DLOCI TO M-LOC
+           MOVE DTECHI TO M-TECH
+           MOVE DEARNI TO M-EARN-I
+           MOVE DDEDNI TO M-DEDN-I
+           MOVE DDOBI TO M-DOB
+           PERFORM CHECK-PARA
+           COMPUTE M-SAL = M-EARN - M-DEDN
+           PERFORM REWRITE-PARA.
+       REWRITE-PARA.
+           EXEC CICS READ
+               FILE('P10AFILE')
+               RIDFLD(DIDI)
+               INTO(DETAILS)
+               UPDATE
+           END-EXEC
+           EXEC CICS REWRITE
+               FILE('P10AFILE')
+               FROM(MASTER-RECORD)
+           END-EXEC.
+       DELETE-PARA.
+           EXEC CICS READ
+               FILE('P10AFILE')
+               RIDFLD(DIDI)
+               INTO(DETAILS)
+               UPDATE
+           END-EXEC
+           EXEC CICS DELETE
+               FILE('P10AFILE')
+               RIDFLD(IDO)
+           END-EXEC.
+           PERFORM SEND-PARA-1.
+       SEND-PARA-1.
+           ADD 1 TO WS-SUB
+           IF WS-SUB < 13
+           MOVE 'SEND PARA 1    ' TO WS-TAB(WS-SUB)
+           END-IF.
+           EXEC CICS SEND
+               MAP('E2MAP')
+               MAPSET('P10AS04')
+               FROM(E2MAPO)
+               CURSOR
+               ERASE
+           END-EXEC.
+           EXEC CICS RETURN
+               TRANSID('P10D')
+               COMMAREA(WS-COM)
+           END-EXEC.
+       SEND-PARA-2.
+           ADD 1 TO WS-SUB
+           IF WS-SUB < 13
+           MOVE 'SEND PARA 2    ' TO WS-TAB(WS-SUB)
+           END-IF.
+           EXEC CICS SEND
+               MAP('E3MAP')
+               MAPSET('P10AS04')
+               FROM(E3MAPO)
+               CURSOR
+               ERASE
+           END-EXEC.
+           EXEC CICS RETURN
+               TRANSID('P10D')
+               COMMAREA(WS-COM)
+           END-EXEC.
+       RECEIVE-PARA-1.
+           ADD 1 TO WS-SUB
+           IF WS-SUB < 13
+           MOVE 'RECEIVE PARA 1 ' TO WS-TAB(WS-SUB)
+           END-IF.
+           EXEC CICS RECEIVE
+               MAP('E2MAP')
+               MAPSET('P10AS04')
+               INTO(E2MAPI)
+           END-EXEC.
+       RECEIVE-PARA-2.
+           ADD 1 TO WS-SUB
+           IF WS-SUB < 13
+           MOVE 'RECEIVE PARA 2 ' TO WS-TAB(WS-SUB)
+           END-IF.
+           EXEC CICS RECEIVE
+               MAP('E3MAP')
+               MAPSET('P10AS04')
+               INTO(E3MAPI)
+           END-EXEC.
+       CHECK-PARA.
+           ADD 1 TO WS-SUB
+           IF WS-SUB < 13
+           MOVE 'CHECK PARA     ' TO WS-TAB(WS-SUB)
+           END-IF.
+           IF M-DEDN = ZERO
+               MOVE -1 TO DDEDNL
+               MOVE 'N' TO FLAG
+           ELSE
+               MOVE 'Y' TO FLAG
+           END-IF.
+           IF M-EARN = ZERO
+               MOVE -1 TO DEARNL
+               MOVE 'N' TO FLAG
+           ELSE
+               MOVE 'Y' TO FLAG
+           END-IF.
+           IF M-TECH = SPACES OR ZERO
+               MOVE -1 TO DTECHL
+               MOVE 'N' TO FLAG
+           ELSE
+               MOVE 'Y' TO FLAG
+           END-IF.
+           IF M-DOB = SPACES OR ZERO
+               MOVE -1 TO DDOBL
+               MOVE 'N' TO FLAG
+           ELSE
+               MOVE 'Y' TO FLAG
+           END-IF.
+           IF M-LOC = SPACES OR ZERO
+               MOVE -1 TO DLOCL
+               MOVE 'N' TO FLAG
+           ELSE
+               MOVE 'Y' TO FLAG
+           END-IF.
+           IF M-NAME = SPACES OR ZERO
+               MOVE -1 TO DNAMEL
+               MOVE 'N' TO FLAG
+           ELSE
+               MOVE 'Y' TO FLAG
+           END-IF.
+           IF CHECK-FLAG
+               PERFORM SEND-PARA-2
+           END-IF.
